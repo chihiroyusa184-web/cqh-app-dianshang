@@ -36,12 +36,15 @@ export async function createApp({ dataFile = join(root, 'data', 'store.json'), m
   const store = await openStore(dataFile);
   const server = createServer(async (request, response) => {
     try {
-      const path = new URL(request.url, 'http://localhost').pathname;
+      const url = new URL(request.url, 'http://localhost');
+      const path = url.pathname;
       if (request.method === 'GET' && path === '/') {
         response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Content-Type-Options': 'nosniff' });
         response.end(await readFile(join(root, 'public', 'index.html')));
       } else if (request.method === 'GET' && path === '/api/products') {
-        send(response, 200, store.snapshot().products);
+        const keyword = (url.searchParams.get('keyword') || '').trim().toLowerCase();
+        const products = store.snapshot().products.filter(product => product.name.toLowerCase().includes(keyword));
+        send(response, 200, products);
       } else if (request.method === 'GET' && path === '/api/coupons') {
         send(response, 200, store.snapshot().coupons.filter(item => item.enabled && Date.parse(item.expiresAt) > Date.now()));
       } else if (request.method === 'POST' && path === '/api/quote') {

@@ -136,3 +136,20 @@ test('HTTP拒绝畸形JSON及错误内容类型 不暴露内部错误', async t 
   assert.equal((await fetch(base + '/api/quote', { method: 'POST', body: '{}' })).status, 415);
   assert.equal((await api('/api/unknown')).status, 404);
 });
+test('HTTP商品名称搜索支持匹配 空关键词 无匹配 空格及大小写', async t => {
+  const { api, store } = await fixture(t);
+  const before = structuredClone(store.snapshot());
+  const names = async keyword => {
+    const result = await api('/api/products?keyword=' + encodeURIComponent(keyword));
+    assert.equal(result.status, 200);
+    return result.body.map(product => product.name);
+  };
+
+  assert.deepEqual(await names('键盘'), ['机械键盘']);
+  assert.deepEqual(await names(' 鼠标 '), ['无线鼠标']);
+  assert.deepEqual(await names('usb'), ['USB扩展器']);
+  assert.deepEqual(await names(''), ['机械键盘', '无线鼠标', 'USB扩展器']);
+  assert.deepEqual(await names('   '), ['机械键盘', '无线鼠标', 'USB扩展器']);
+  assert.deepEqual(await names('不存在'), []);
+  assert.deepEqual(store.snapshot(), before);
+});
