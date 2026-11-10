@@ -3,14 +3,14 @@
 <style>
 :root{font-family:"Microsoft YaHei",system-ui,sans-serif;color:#243347;background:#f3f5f8}*{box-sizing:border-box}body{margin:0}header{background:#183851;color:white;padding:26px max(24px,calc((100vw - 1100px)/2));}header p{color:#c8d9e4;font-size:14px}h1{font-size:27px;margin:0}main{max-width:1150px;margin:25px auto;padding:0 24px}h2{font-size:19px;margin-top:0}.grid{display:grid;grid-template-columns:1.2fr 1fr;gap:22px}.panel{background:white;border:1px solid #dce3ea;border-radius:10px;padding:24px;margin-bottom:22px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:13px 8px;border-bottom:1px solid #e5eaf0;text-align:left}th{color:#607080}input,select{font:inherit;padding:9px;border:1px solid #bcc9d5;border-radius:5px;max-width:100%}input[type=number]{width:70px}button{font:inherit;background:#176963;color:white;border:0;border-radius:5px;padding:10px 17px;cursor:pointer;margin:4px 4px 4px 0}button.secondary{background:#e8eef4;color:#243347}button:disabled{opacity:.5;cursor:wait}label{display:block;margin:12px 0 6px;font-size:14px}.muted{color:#667789;font-size:13px}.price{font-weight:700}.total{font-size:27px;font-weight:700;color:#176963;margin:18px 0}.message{white-space:pre-wrap;line-height:1.7;margin:12px 0;color:#15534d}.error{color:#b02d36}.stats{display:flex;flex-wrap:wrap;gap:25px}.stat strong{display:block;font-size:25px}.stat span{color:#667789;font-size:13px}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}details{margin-top:16px}summary{cursor:pointer;font-weight:600}.wide{width:100%}@media(max-width:820px){.grid{grid-template-columns:1fr}main{padding:0 12px}.panel{padding:16px}}
 </style></head><body><header><h1>mall-system 电商促销系统</h1><p>软件工程实验 · 商品选购、优惠计算、订单与经营统计</p></header><main>
-<div class="grid"><section class="panel"><h2>商品与购物车</h2><p class="muted">填写购买数量，数量为0时不加入购物车。</p><table><thead><tr><th>商品</th><th>单价</th><th>库存</th><th>数量</th></tr></thead><tbody id="products"></tbody></table><p id="stock-message" class="muted"></p></section>
+<div class="grid"><section class="panel"><h2>商品与购物车</h2><p class="muted">填写购买数量，数量为0时不加入购物车。</p><div class="row"><input id="keyword" placeholder="输入商品名称" aria-label="商品名称"><button id="search">搜索</button><button id="clear-search" class="secondary">清空</button></div><table><thead><tr><th>商品</th><th>单价</th><th>库存</th><th>数量</th></tr></thead><tbody id="products"></tbody></table><p id="stock-message" class="muted"></p></section>
 <section class="panel"><h2>优惠与结算</h2><label for="coupon">优惠券码</label><input id="coupon" placeholder="例如 SAVE20 或 OFF10"><p id="coupon-hints" class="muted"></p><div><button id="quote">计算优惠</button><button id="order">创建订单</button></div><div id="amount" class="total">等待计算</div><div id="result" class="message" aria-live="polite"></div><p class="muted">一次使用一张优惠券，创建订单后扣减库存。此原型不接入支付。</p></section></div>
 <section class="panel"><h2>运营管理</h2><p class="muted">从启动终端复制本次管理令牌，查看订单统计或维护优惠券。</p><div class="row"><input id="manager-key" type="password" placeholder="输入管理令牌" autocomplete="off"><button id="stats">刷新统计与订单</button></div><div id="stats-view" class="stats"></div><div id="admin-result" class="message" aria-live="polite"></div><div style="overflow:auto"><table><thead><tr><th>订单编号</th><th>创建时间</th><th>数量</th><th>优惠</th><th>应付金额</th></tr></thead><tbody id="orders"></tbody></table></div>
 <details><summary>新增或更新优惠券</summary><div class="row"><label>券码 <input id="code" value="CLASS10"></label><label>类型 <select id="type"><option value="fixed">满减</option><option value="percent">比例优惠</option></select></label><label>门槛 分 <input id="minimum" type="number" min="0" value="10000"></label><label>优惠值 <input id="value" type="number" min="1" value="1000"></label><label>上限 分 <input id="max-discount" type="number" min="0" value="0"></label></div><p class="muted">比例类型的优惠值使用万分比：1000表示优惠10%，即九折；上限为0表示不限额。</p><label>到期时间 ISO格式 含时区 <input id="expires" value="2099-12-31T23:59:59+08:00" style="width:330px"></label><label><input id="enabled" type="checkbox" checked> 启用优惠券</label><button id="save-coupon">保存优惠券</button></details>
 </section></main><script>
 const $ = id => document.getElementById(id);
 const money = value => '¥' + (value / 100).toFixed(2);
-let quantities = {}, requestKey = null, submitting = false;
+let quantities = {}, requestKey = null, submitting = false, productKeyword = '';
 async function api(path, data, admin = false) {
   const headers = {};
   if (data !== undefined) headers['Content-Type'] = 'application/json';
@@ -24,7 +24,8 @@ function message(id, content, error = false) { $(id).textContent = content; $(id
 function row(values) { const tr = document.createElement('tr'); for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); } return tr; }
 function invalidate() { requestKey = null; $('amount').textContent = '等待重新计算'; }
 async function loadProducts() {
-  const products = await api('/api/products'); $('products').replaceChildren();
+  const query = productKeyword ? '?keyword=' + encodeURIComponent(productKeyword) : '';
+  const products = await api('/api/products' + query); $('products').replaceChildren();
   for (const product of products) {
     const tr = row([product.name, money(product.price), product.stock]);
     const td = document.createElement('td'), input = document.createElement('input');
@@ -33,11 +34,14 @@ async function loadProducts() {
     input.addEventListener('input', () => { quantities[product.id] = Number(input.value); invalidate(); });
     td.append(input); tr.append(td); $('products').append(tr);
   }
-  $('stock-message').textContent = '库存已更新，优惠和价格以服务端计算结果为准。';
+  $('stock-message').textContent = products.length ? '库存已更新，优惠和价格以服务端计算结果为准。' : '没有找到商品';
 }
 async function loadCoupons() { const coupons = await api('/api/coupons'); $('coupon-hints').textContent = coupons.map(c => c.code + '：满' + money(c.minimum) + (c.type === 'fixed' ? '减' + money(c.value) : '优惠' + c.value / 100 + '%')).join('；'); }
 function payload() { return { items: Object.entries(quantities).filter(([, q]) => q !== 0).map(([productId, quantity]) => ({ productId, quantity })), couponCode: $('coupon').value.trim() }; }
 $('coupon').addEventListener('input', invalidate);
+$('search').onclick = () => { productKeyword = $('keyword').value.trim(); loadProducts().catch(error => message('stock-message', error.message, true)); };
+$('clear-search').onclick = () => { $('keyword').value = ''; productKeyword = ''; loadProducts().catch(error => message('stock-message', error.message, true)); };
+$('keyword').addEventListener('keydown', event => { if (event.key === 'Enter') $('search').click(); });
 $('quote').onclick = async () => { try { const result = await api('/api/quote', payload()); $('amount').textContent = '应付 ' + money(result.total); message('result', '商品合计 ' + money(result.subtotal) + '，优惠 ' + money(result.discount)); } catch (error) { message('result', error.message, true); } };
 $('order').onclick = async () => {
   if (submitting) return; submitting = true; $('order').disabled = true;
